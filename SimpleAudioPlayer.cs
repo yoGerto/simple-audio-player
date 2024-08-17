@@ -7,9 +7,13 @@ using TMPro;
 using VRC.Udon.Common;
 using System.Threading;
 using UnityEditor;
-using UdonSharpEditor;
 using UnityEngine.UI;
 using UnityEngine.UIElements;
+using System;
+
+#if !COMPILER_UDONSHARP && UNITY_EDITOR
+using UdonSharpEditor;
+#endif
 
 public class SimpleAudioPlayer : UdonSharpBehaviour
 {
@@ -17,45 +21,57 @@ public class SimpleAudioPlayer : UdonSharpBehaviour
     private Animator teddyAnimator;
     private AudioSource teddyAudio;
 
+    public GameObject emptyGameObject;
 
     public AudioClip[] teddyClips;
+
+    public AudioClip testAudioClip;
 
     private float timer = 0.0f;
     private float cooldownTime = 0.5f;
     private bool timerLatch = false;
 
-    public string stringVal = "glorp";
-    public bool godTest = false;
+    [NonSerialized] public string stringVal = "glorp";
+    [NonSerialized] public bool godTest = false;
+
+    [UdonSynced] private int RNGValue = 0;
+
+    [SerializeField] public GameObject SAP_Child;
+    [SerializeField] SimpleAudioPlayer_Child SAP_Child_Script;
 
     private void Start()
     {
         teddyAnimator = GetComponent<Animator>();
         teddyAudio = GetComponent<AudioSource>();
+        SendCustomEvent("SetChildScriptObjects");
+    }
+
+    public void SetChildScriptObjects()
+    {
+        Debug.Log("Entered!");
+        SAP_Child.GetComponent<SimpleAudioPlayer_Child>().SetProgramVariable("test", 1);
+        SAP_Child.GetComponent<SimpleAudioPlayer_Child>().SetProgramVariable("SAPChild_AudioClips", testAudioClip);
+    }
+
+    public override void OnPickup()
+    {
+        Networking.SetOwner(Networking.LocalPlayer, SAP_Child);
     }
 
     public override void OnPickupUseDown()
     {
-        if (timerLatch)
-        {
-            float currentTime = Time.time;
-            if (currentTime - timer > cooldownTime)
-            {
-                TeddyBearAudioHandler();
-                timer = currentTime;
-            }
-        }
-        else
-        {
-            TeddyBearAudioHandler();
-            timer = Time.time;
-            timerLatch = true;
-        }
+        //RNGValue = UnityEngine.Random.Range(0, 200);
+        //SAP_Child.GetComponent<SimpleAudioPlayer_Child>().SetProgramVariable("test2", RNGValue);
+        SAP_Child.GetComponent<SimpleAudioPlayer_Child>().SendCustomEvent("GenerateRNGVal");
+        //RNGValue = UnityEngine.Random.Range(0, 200);
+        //Debug.Log(RNGValue.ToString());
+        //RequestSerialization();
     }
 
     public void TeddyBearAudioHandler()
     {
         int audioRNG;
-        audioRNG = Random.Range(0, 200);
+        audioRNG = UnityEngine.Random.Range(0, 200);
         if (audioRNG < 100)
         {
             SendCustomNetworkEvent(VRC.Udon.Common.Interfaces.NetworkEventTarget.All, "PlayTeddyBearAudio0");
@@ -98,12 +114,13 @@ public class SimpleAudioPlayer : UdonSharpBehaviour
 }
 
 #if !COMPILER_UDONSHARP && UNITY_EDITOR
-[CustomEditor(typeof(TeddyBear))]
+[CustomEditor(typeof(SimpleAudioPlayer))]
 public class CustomInspectorEditor : Editor
 {
     bool boolTest1 = false;
 
     GameObject gameObjectTest;
+    GameObject instantiatedGameObject;
 
     /* Learning how to create Tabs in the editor window from this YouTube tutorial from The Messy Coder:
      * https://www.youtube.com/watch?v=-sJRvRirJ9Q
@@ -125,10 +142,10 @@ public class CustomInspectorEditor : Editor
 
         if (m_TabsIndex >= 0)
         {
-            switch(m_Tabs[m_TabsIndex])
+            switch (m_Tabs[m_TabsIndex])
             {
                 case "Option One":
-                    EditorGUILayout.HelpBox("One", MessageType.Info); 
+                    EditorGUILayout.HelpBox("One", MessageType.Info);
                     break;
                 case "Option Two":
                     EditorGUILayout.HelpBox("Two", MessageType.Info);
@@ -136,25 +153,46 @@ public class CustomInspectorEditor : Editor
             }
         }
 
-        TeddyBear inspectorBehaviour = (TeddyBear)target;
+        SimpleAudioPlayer inspectorBehaviour = (SimpleAudioPlayer)target;
 
         EditorGUI.BeginChangeCheck();
 
-        gameObjectTest = inspectorBehaviour.gameObject;
-
-        if (gameObjectTest.GetComponent<AudioSource>() == null )
+        gameObjectTest = inspectorBehaviour.gameObject;        
+        
+        if (gameObjectTest.GetComponent<AudioSource>() == null)
         {
             EditorGUILayout.HelpBox("Object is missing an Audio Source!", MessageType.Error);
         }
 
+        //Debug.Log(inspectorBehaviour.GetComponentInChildren<SimpleAudioPlayer_Child>());
+
+        if (inspectorBehaviour.GetComponentInChildren<SimpleAudioPlayer_Child>() == null)
+        {
+            EditorGUILayout.HelpBox("No Valid SAP Children were found! Use the button below generate one.", MessageType.Error);
+            //Debug.LogError("No Valid SAP Children were found! Use the button inside of the script to generate one.");
+        }
+
+        if (GUILayout.Button("Test"))
+        {
+            if (instantiatedGameObject == null)
+            {
+                instantiatedGameObject = (GameObject)PrefabUtility.InstantiatePrefab(inspectorBehaviour.emptyGameObject, inspectorBehaviour.transform);
+                inspectorBehaviour.SAP_Child = instantiatedGameObject;
+            }
+            else
+            {
+                Debug.LogWarning("A valid SAP Child has been detected. Please delete the existing SAP Child if you wish to regenerate");
+            }
+        }
+
         // A simple string field modification with Undo handling
-        int test = EditorGUILayout.IntField("Num of Audio Clips", inspectorBehaviour.teddyClips.Length);
-        string newStrVal = EditorGUILayout.TextField("String Val", inspectorBehaviour.stringVal);
+        //int test = EditorGUILayout.IntField("Num of Audio Clips", inspectorBehaviour.teddyClips.Length);
+        //string newStrVal = EditorGUILayout.TextField("String Val", inspectorBehaviour.stringVal);
         bool boolTest = EditorGUILayout.Toggle("Bool", inspectorBehaviour.godTest);
 
         if (boolTest)
         {
-            EditorGUILayout.HelpBox("I'm over here stroking my dick I got lotion on my shit right now I'm horny as fuck man I'm a freak", MessageType.Info);
+            EditorGUILayout.HelpBox("Testing", MessageType.Info);
         }
 
         if (EditorGUI.EndChangeCheck())
@@ -162,7 +200,7 @@ public class CustomInspectorEditor : Editor
             Undo.RecordObject(inspectorBehaviour, "Modify string val");
 
             inspectorBehaviour.godTest = boolTest;
-            inspectorBehaviour.stringVal = newStrVal;
+            //inspectorBehaviour.stringVal = newStrVal;
         }
     }
 }
