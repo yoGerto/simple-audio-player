@@ -3,10 +3,9 @@ using UdonSharp;
 using UnityEngine;
 using VRC.SDKBase;
 using UnityEditor;
-using UdonSharpEditor;
-
 
 #if !COMPILER_UDONSHARP && UNITY_EDITOR
+using UdonSharpEditor;
 using UnityEditorInternal;
 #endif
 
@@ -48,6 +47,7 @@ public class SimpleAudioPlayer : UdonSharpBehaviour
             {
                 // We are in the random tab, so pass through the limits array
                 // Using SetProgramVariable here because we have a FieldChangeCallback attribute on the limits variable in the other script.
+                // So Udon stipulates we need to use this function to set the variable rather than using the classname.variable
                 SAP_Child_Script.SetProgramVariable("limits", limits);
             }
             else
@@ -70,35 +70,19 @@ public class SimpleAudioPlayer : UdonSharpBehaviour
 
     public override void OnPickupUseDown()
     {
-        if (m_Tabs_Serialized == 0)
-        {
-            SAP_Child_Script.SingleSound_PlaySound();
-        }
-        else
-        {
-            if (m_TabsChild_Serialized == 0)
-            {
-
-            }
-            else if (m_TabsChild_Serialized == 1)
-            {
-                SAP_Child_Script.MultipleSound_PlaySequence();
-            }
-        }
-        //SAP_Child.GetComponent<SimpleAudioPlayer_Child>().SendCustomEvent("GenerateRNGVal");
-        //SAP_Child_Script.GenerateRNGVal();
+        SAP_Child_Script.PlaySound_AllSettings();
     }
 
     #region Interact Method (not currently supported)
     // *NOTE*   For now I will not support the Interact method as you cannot change some of the properties through scripts (thanks Udon).
     //          The script will only work on Pickup objects for now.
 
-    public override void Interact()
-    {
-        this.DisableInteractive = false;
-        // todo: add playing sounds from interact
-        // should just call the same event but also want to test to see if there are any problems with having interact and pickup on the same script.
-    }
+    //public override void Interact()
+    //{
+    //    this.DisableInteractive = false;
+    //    // todo: add playing sounds from interact
+    //    // should just call the same event but also want to test to see if there are any problems with having interact and pickup on the same script.
+    //}
     #endregion
 
 }
@@ -116,8 +100,8 @@ public class CustomInspectorEditor : Editor
      * https://www.youtube.com/watch?v=-sJRvRirJ9Q
      */
 
-    private string[] m_Tabs = { "Single Sound", "Multiple Sounds"};
-    private string[] m_Tabs_Child = { "Random", "Sequence"};
+    private string[] m_Tabs = { "Single Sound", "Multiple Sounds" };
+    private string[] m_Tabs_Child = { "Random", "Sequence" };
 
 
     /* Approach to create an Array List in Custom Editor from this StackOverflow question:
@@ -363,8 +347,6 @@ public class CustomInspectorEditor : Editor
                             {
                                 Rect testRect = EditorGUILayout.BeginHorizontal();
 
-                                Debug.Log(Screen.width);
-
                                 //300 is a good value for responsiveness
 
                                 // ...For some reason you need to write GUI content to the rectangle for it to be in the correct position
@@ -410,6 +392,11 @@ public class CustomInspectorEditor : Editor
                         case "Sequence":
                             serializedObject.Update();
                             list.DoLayoutList();
+                            if (list.count == 0)
+                            {
+                                EditorGUILayout.HelpBox("Please add entries to the sequence.", MessageType.Error);
+                                inspectorBehaviour.isError = true;
+                            }
                             serializedObject.ApplyModifiedProperties();
                             break;
                     }
@@ -421,33 +408,30 @@ public class CustomInspectorEditor : Editor
 
         EditorGUI.BeginChangeCheck();
 
-        GameObject glorp = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/GameObject.prefab");
+        GameObject glorp = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/SimpleAudioPlayer/SAP Child.prefab");
         inspectorBehaviour.glorpington = glorp;
 
         gameObjectTest = inspectorBehaviour.gameObject;
 
-        if (gameObjectTest.GetComponent<AudioSource>() == null)
-        {
-            EditorGUILayout.HelpBox("Object is missing an Audio Source!", MessageType.Error);
-        }
-
         if (inspectorBehaviour.GetComponentInChildren<SimpleAudioPlayer_Child>() == null)
         {
+            inspectorBehaviour.isError = true;
             EditorGUILayout.HelpBox("No Valid SAP Child was found! Use the button below generate one.", MessageType.Error);
 
-            if (GUILayout.Button("Test"))
+            if (GUILayout.Button("Generate SAP Child"))
             {
                 if (instantiatedGameObject == null)
                 {
                     instantiatedGameObject = (GameObject)PrefabUtility.InstantiatePrefab(glorp, inspectorBehaviour.transform);
                     inspectorBehaviour.SAP_Child = instantiatedGameObject;
                 }
-                else
-                {
-                    Debug.LogWarning("A valid SAP Child has been detected. Please delete the existing SAP Child if you wish to regenerate");
-                }
             }
+        }
 
+        if (inspectorBehaviour.SAP_Child.GetComponent<AudioSource>() == null)
+        {
+            inspectorBehaviour.isError = true;
+            EditorGUILayout.HelpBox("SAP Child is missing an Audio Source! Re-add the component, or delete and regenerate.", MessageType.Error);
         }
 
         if (EditorGUI.EndChangeCheck())
@@ -458,6 +442,6 @@ public class CustomInspectorEditor : Editor
 
         }
     }
-    
+
 }
 #endif
