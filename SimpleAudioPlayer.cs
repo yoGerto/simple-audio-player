@@ -3,6 +3,9 @@ using UdonSharp;
 using UnityEngine;
 using VRC.SDKBase;
 using UnityEditor;
+using VRC.SDK3.Components;
+using System.Diagnostics;
+
 
 #if !COMPILER_UDONSHARP && UNITY_EDITOR
 using UdonSharpEditor;
@@ -12,7 +15,7 @@ using UnityEditorInternal;
 public class SimpleAudioPlayer : UdonSharpBehaviour
 {
     [SerializeField] public GameObject SAP_Child;
-    [HideInInspector] public GameObject glorpington;
+    [HideInInspector] public GameObject SAP_Child_Prefab;
     SimpleAudioPlayer_Child SAP_Child_Script;
 
     public AudioClip[] soundClips;
@@ -21,7 +24,7 @@ public class SimpleAudioPlayer : UdonSharpBehaviour
     public int[] soundSequence_int;
     public bool isError = false;
 
-    //public int objectType;
+    public int objectType;
 
     private void Start()
     {
@@ -35,6 +38,21 @@ public class SimpleAudioPlayer : UdonSharpBehaviour
         SAP_Child_Script.selectedTabs[0] = m_Tabs_Serialized;
         SAP_Child_Script.selectedTabs[1] = m_TabsChild_Serialized;
         SAP_Child_Script.isError = isError;
+
+        // If objectType is set to Pickup
+        if (objectType == 0)
+        {
+            // This line turns off the Interact event
+            DisableInteractive = true;
+        }
+        else
+        {
+            // Only do this if a VRCPickup component exists
+            if (GetComponent<VRCPickup>() != null)
+            {
+                GetComponent<VRCPickup>().pickupable = false;
+            }
+        }
 
         if (m_Tabs_Serialized == 0)
         {
@@ -73,17 +91,11 @@ public class SimpleAudioPlayer : UdonSharpBehaviour
         SAP_Child_Script.PlaySound_AllSettings();
     }
 
-    #region Interact Method (not currently supported)
-    // *NOTE*   For now I will not support the Interact method as you cannot change some of the properties through scripts (thanks Udon).
-    //          The script will only work on Pickup objects for now.
-
-    //public override void Interact()
-    //{
-    //    this.DisableInteractive = false;
-    //    // todo: add playing sounds from interact
-    //    // should just call the same event but also want to test to see if there are any problems with having interact and pickup on the same script.
-    //}
-    #endregion
+    public override void Interact()
+    {
+        Networking.SetOwner(Networking.LocalPlayer, SAP_Child);
+        SAP_Child_Script.PlaySound_AllSettings();
+    }
 
 }
 
@@ -92,7 +104,6 @@ public class SimpleAudioPlayer : UdonSharpBehaviour
 [CustomEditor(typeof(SimpleAudioPlayer))]
 public class CustomInspectorEditor : Editor
 {
-
     GameObject gameObjectTest;
     GameObject instantiatedGameObject;
 
@@ -100,8 +111,9 @@ public class CustomInspectorEditor : Editor
      * https://www.youtube.com/watch?v=-sJRvRirJ9Q
      */
 
-    private string[] m_Tabs = { "Single Sound", "Multiple Sounds" };
-    private string[] m_Tabs_Child = { "Random", "Sequence" };
+    private string[] m_Tabs = { "Single Sound", "Multiple Sounds"};
+    private string[] m_Tabs_Child = { "Random", "Sequence"};
+    private string[] dropdownOptions = { "Pickup", "Interact" };
 
 
     /* Approach to create an Array List in Custom Editor from this StackOverflow question:
@@ -119,8 +131,6 @@ public class CustomInspectorEditor : Editor
     SerializedProperty tabIndexChild_Serialized;
     SerializedProperty targetSound_Serialized;
     SerializedProperty soundClips_Serialized;
-
-
     SerializedProperty soundSequence_int_Serialized;
 
     ReorderableList list;
@@ -208,7 +218,7 @@ public class CustomInspectorEditor : Editor
     public override void OnInspectorGUI()
     {
         // I will not be drawing the default inspector here, I would like to pick and choose which UI elements from the original list I display
-        //// Draws the default convert to UdonBehaviour button, program asset field, sync settings, etc.
+        // Draws the default convert to UdonBehaviour button, program asset field, sync settings, etc.
         //if (UdonSharpGUI.DrawDefaultUdonSharpBehaviourHeader(target)) return;
 
         serializedObject.Update();
@@ -219,24 +229,33 @@ public class CustomInspectorEditor : Editor
         inspectorBehaviour.isError = false;
 
         #region Object Type Dropdown
-        //Rect configRect = EditorGUILayout.BeginHorizontal();
-        //float labelWidth = EditorStyles.label.CalcSize(new GUIContent("Object Type")).x;
-        //// Making the dropdown box (popup) "Responsive"
-        //GUILayout.Label("Object Type");
-        //if (Screen.width > 190 )
-        //{
-        //    configRect.width /= 2;
-        //    configRect.x += configRect.width;
-        //}
-        //else
-        //{
-        //    configRect.x += labelWidth + 5;
-        //    configRect.width = Screen.width - (labelWidth + 5);
-        //}
-        //inspectorBehaviour.objectType = EditorGUI.Popup(configRect, inspectorBehaviour.objectType, dropdownOptions);
-        //EditorGUILayout.EndHorizontal();
-        //GUILayout.Space(5);
-        #endregion 
+        Rect configRect = EditorGUILayout.BeginHorizontal();
+        float labelWidth = EditorStyles.label.CalcSize(new GUIContent("Object Type")).x;
+        // Making the dropdown box (popup) "Responsive"
+        GUILayout.Label("Object Type");
+        if (Screen.width > 190)
+        {
+            configRect.width /= 2;
+            configRect.x += configRect.width;
+        }
+        else
+        {
+            configRect.x += labelWidth + 5;
+            configRect.width = Screen.width - (labelWidth + 5);
+        }
+        inspectorBehaviour.objectType = EditorGUI.Popup(configRect, inspectorBehaviour.objectType, dropdownOptions);
+        EditorGUILayout.EndHorizontal();
+        GUILayout.Space(5);
+        #endregion
+
+        #region Interact Options on Dropdown
+        if (inspectorBehaviour.objectType == 1)
+        {
+            inspectorBehaviour.GetComponent<VRCInteractable>().proximity = EditorGUILayout.Slider("Proximity", inspectorBehaviour.GetComponent<VRCInteractable>().proximity, 0, 100);
+            inspectorBehaviour.GetComponent<VRCInteractable>().interactText = EditorGUILayout.TextField("Interaction Text", inspectorBehaviour.GetComponent<VRCInteractable>().interactText);
+        }
+        GUILayout.Space(5);
+        #endregion
 
         EditorGUILayout.PropertyField(soundClips_Serialized, true);
 
@@ -406,10 +425,11 @@ public class CustomInspectorEditor : Editor
         serializedObject.ApplyModifiedProperties();
         #endregion
 
+
         EditorGUI.BeginChangeCheck();
 
-        GameObject glorp = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/SimpleAudioPlayer/SAP Child.prefab");
-        inspectorBehaviour.glorpington = glorp;
+        GameObject SAP_Child_Prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/SimpleAudioPlayer/SAP Child.prefab");
+        inspectorBehaviour.SAP_Child_Prefab = SAP_Child_Prefab;
 
         gameObjectTest = inspectorBehaviour.gameObject;
 
@@ -422,7 +442,7 @@ public class CustomInspectorEditor : Editor
             {
                 if (instantiatedGameObject == null)
                 {
-                    instantiatedGameObject = (GameObject)PrefabUtility.InstantiatePrefab(glorp, inspectorBehaviour.transform);
+                    instantiatedGameObject = (GameObject)PrefabUtility.InstantiatePrefab(SAP_Child_Prefab, inspectorBehaviour.transform);
                     inspectorBehaviour.SAP_Child = instantiatedGameObject;
                 }
             }
@@ -442,6 +462,6 @@ public class CustomInspectorEditor : Editor
 
         }
     }
-
+    
 }
 #endif
