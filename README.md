@@ -17,3 +17,5 @@ You should now have a folder called SimpleAudioPlayer in your Assets folder.
 
 ## Implementation notes
 The sounds are played through a child object that is created within the parent object. This approach was taken because I wanted to use the Manual Sync mode, which is much faster and responsive when handling small updates.
+
+The script throws an error if you try and add more than one of the same sound to the Sound List. This is a limitation imposed on to the project to attain the desired functionality due to Udon's lack of support for custom types.
